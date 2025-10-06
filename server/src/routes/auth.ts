@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import User from '../models/user.js';
+import BlacklistedToken from '../models/blacklistedToken.js';
 import { JWT_SECRET, JWT_EXPIRES_IN } from '../config/jwt.js';
+import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -213,11 +215,29 @@ router.post('/login', async (req, res) => {
  *       401:
  *         description: Not authenticated
  */
-router.post('/logout', (req, res) => {
-    // Dummy implementation
-    res.status(200).json({
-        message: 'Successfully logged out'
-    });
+router.post('/logout', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+        const authHeader = req.headers['authorization'];
+        const token = authHeader?.split(' ')[1];
+
+        if (!token) {
+            return res.status(400).json({
+                message: 'No token provided'
+            });
+        }
+
+        // Add token to blacklist
+        await BlacklistedToken.create({ token });
+
+        res.status(200).json({
+            message: 'Successfully logged out'
+        });
+    } catch (error) {
+        console.error('Logout error:', error);
+        res.status(500).json({
+            message: 'Error during logout'
+        });
+    }
 });
 
 export default router;
