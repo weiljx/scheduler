@@ -1,5 +1,7 @@
 import { Router } from 'express';
+import jwt from 'jsonwebtoken';
 import User from '../models/user.js';
+import { JWT_SECRET, JWT_EXPIRES_IN } from '../config/jwt.js';
 
 const router = Router();
 
@@ -134,16 +136,57 @@ router.post('/register', async (req, res) => {
  *       401:
  *         description: Invalid credentials
  */
-router.post('/login', (req, res) => {
-    // Dummy implementation
-    const { email, password } = req.body;
-    res.status(200).json({
-        token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-        user: {
-            id: '123e4567-e89b-12d3-a456-426614174000',
-            email: email
+router.post('/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        // Validate input
+        if (!email || !password) {
+            return res.status(400).json({
+                message: 'Email and password are required'
+            });
         }
-    });
+
+        // Find user by email
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(401).json({
+                message: 'Invalid credentials'
+            });
+        }
+
+        // Check password
+        const isValidPassword = await user.comparePassword(password);
+        if (!isValidPassword) {
+            return res.status(401).json({
+                message: 'Invalid credentials'
+            });
+        }
+
+        // Generate JWT token
+        const token = jwt.sign(
+            { 
+                userId: user._id,
+                email: user.email
+            },
+            JWT_SECRET,
+            { expiresIn: JWT_EXPIRES_IN }
+        );
+
+        // Send response
+        res.status(200).json({
+            token,
+            user: {
+                id: user._id,
+                email: user.email
+            }
+        });
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({
+            message: 'Error during login'
+        });
+    }
 });
 
 /**

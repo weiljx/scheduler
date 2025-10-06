@@ -6,9 +6,14 @@ export interface IUser {
     password: string;
     createdAt: Date;
     updatedAt: Date;
+    comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
-const userSchema = new mongoose.Schema<IUser>({
+export interface IUserModel extends mongoose.Model<IUser> {
+    comparePassword(candidatePassword: string): Promise<boolean>;
+}
+
+const userSchema = new mongoose.Schema<IUser, IUserModel>({
     email: {
         type: String,
         required: true,
