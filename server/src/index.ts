@@ -1,6 +1,7 @@
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
+import routes from './routes/index.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -27,9 +28,8 @@ const swaggerOptions = {
 const swaggerSpec = swaggerJSDoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
+
+app.use('/api', routes);
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
