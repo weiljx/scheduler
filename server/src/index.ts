@@ -2,8 +2,12 @@ import express from 'express';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
 import routes from './routes/index.js';
+import connectDB from './config/database.js';
 
 const app = express();
+
+// Connect to MongoDB
+connectDB();
 const port = process.env.PORT || 3000;
 
 app.use(express.json());
