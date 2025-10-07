@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import User from '../models/user.js';
-import BlacklistedToken from '../models/blacklistedToken.js';
 import { JWT_SECRET, JWT_EXPIRES_IN } from '../config/jwt.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
+import { AuthService } from '../services/authService.js';
+import { HttpStatus, HttpMessages } from '../constants/httpStatus.js';
 
 const router = Router();
 
@@ -56,16 +57,16 @@ router.post('/register', async (req, res) => {
 
         // Validate input
         if (!email || !password) {
-            return res.status(400).json({
-                message: 'Email and password are required'
+            return res.status(HttpStatus.BAD_REQUEST).json({
+                message: HttpMessages.MISSING_FIELDS
             });
         }
 
         // Check if user already exists
         const existingUser = await User.findOne({ email });
         if (existingUser) {
-            return res.status(400).json({
-                message: 'User with this email already exists'
+            return res.status(HttpStatus.CONFLICT).json({
+                message: HttpMessages.USER_EXISTS
             });
         }
 
@@ -77,14 +78,14 @@ router.post('/register', async (req, res) => {
 
         await user.save();
 
-        res.status(201).json({
-            message: 'User registered successfully',
+        res.status(HttpStatus.CREATED).json({
+            message: HttpMessages.REGISTRATION_SUCCESS,
             userId: user._id
         });
     } catch (error) {
         console.error('Registration error:', error);
-        res.status(500).json({
-            message: 'Error registering user'
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+            message: HttpMessages.INTERNAL_ERROR
         });
     }
 });
@@ -144,24 +145,24 @@ router.post('/login', async (req, res) => {
 
         // Validate input
         if (!email || !password) {
-            return res.status(400).json({
-                message: 'Email and password are required'
+            return res.status(HttpStatus.BAD_REQUEST).json({
+                message: HttpMessages.MISSING_FIELDS
             });
         }
 
         // Find user by email
         const user = await User.findOne({ email });
         if (!user) {
-            return res.status(401).json({
-                message: 'Invalid credentials'
+            return res.status(HttpStatus.UNAUTHORIZED).json({
+                message: HttpMessages.INVALID_CREDENTIALS
             });
         }
 
         // Check password
         const isValidPassword = await user.comparePassword(password);
         if (!isValidPassword) {
-            return res.status(401).json({
-                message: 'Invalid credentials'
+            return res.status(HttpStatus.UNAUTHORIZED).json({
+                message: HttpMessages.INVALID_CREDENTIALS
             });
         }
 
@@ -176,7 +177,8 @@ router.post('/login', async (req, res) => {
         );
 
         // Send response
-        res.status(200).json({
+        res.status(HttpStatus.OK).json({
+            message: HttpMessages.LOGIN_SUCCESS,
             token,
             user: {
                 id: user._id,
@@ -185,8 +187,8 @@ router.post('/login', async (req, res) => {
         });
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({
-            message: 'Error during login'
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+            message: HttpMessages.INTERNAL_ERROR
         });
     }
 });
@@ -218,24 +220,16 @@ router.post('/login', async (req, res) => {
 router.post('/logout', authenticateToken, async (req: AuthRequest, res) => {
     try {
         const authHeader = req.headers['authorization'];
-        const token = authHeader?.split(' ')[1];
+        const token = AuthService.extractTokenFromHeader(authHeader);
+        await AuthService.blacklistToken(token);
 
-        if (!token) {
-            return res.status(400).json({
-                message: 'No token provided'
-            });
-        }
-
-        // Add token to blacklist
-        await BlacklistedToken.create({ token });
-
-        res.status(200).json({
-            message: 'Successfully logged out'
+        res.status(HttpStatus.OK).json({
+            message: HttpMessages.LOGOUT_SUCCESS
         });
     } catch (error) {
         console.error('Logout error:', error);
-        res.status(500).json({
-            message: 'Error during logout'
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+            message: HttpMessages.INTERNAL_ERROR
         });
     }
 });

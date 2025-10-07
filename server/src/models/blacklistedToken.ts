@@ -1,9 +1,5 @@
 import mongoose from 'mongoose';
-
-export interface IBlacklistedToken {
-    token: string;
-    createdAt: Date;
-}
+import { type IBlacklistedToken } from './types.js';
 
 const blacklistedTokenSchema = new mongoose.Schema<IBlacklistedToken>({
     token: {
