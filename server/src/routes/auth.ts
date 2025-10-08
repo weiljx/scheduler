@@ -13,7 +13,9 @@ const router = Router();
  * /api/auth/register:
  *   post:
  *     summary: Register a new user
- *     description: Creates a new user account
+ *     description: |
+ *       Creates a new user account. The email must be unique and in a valid format.
+ *       The password will be automatically hashed before storage.
  *     tags:
  *       - Authentication
  *     requestBody:
@@ -33,7 +35,7 @@ const router = Router();
  *               password:
  *                 type: string
  *                 format: password
- *                 example: "********"
+ *                 example: "Password123!"
  *     responses:
  *       201:
  *         description: User successfully registered
@@ -48,8 +50,34 @@ const router = Router();
  *                 userId:
  *                   type: string
  *                   example: "123e4567-e89b-12d3-a456-426614174000"
+ *             examples:
+ *               success:
+ *                 value:
+ *                   message: User registered successfully
+ *                   userId: "123e4567-e89b-12d3-a456-426614174000"
  *       400:
- *         description: Invalid input
+ *         description: Invalid input (missing fields or invalid email format)
+ *         content:
+ *           application/json:
+ *             examples:
+ *               missingFields:
+ *                 value:
+ *                   message: Required fields are missing
+ *               invalidEmail:
+ *                 value:
+ *                   message: Invalid email format
+ *       409:
+ *         description: Email already exists
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: User with this email already exists
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: Error registering user
  */
 router.post('/register', async (req, res) => {
     try {
@@ -103,7 +131,10 @@ router.post('/register', async (req, res) => {
  * /api/auth/login:
  *   post:
  *     summary: Login user
- *     description: Authenticate a user and return a token
+ *     description: |
+ *       Authenticates a user with email and password, returning a JWT token.
+ *       The token should be included in subsequent requests in the Authorization header.
+ *       Token expiration is set to JWT_EXPIRES_IN configuration value.
  *     tags:
  *       - Authentication
  *     requestBody:
@@ -123,7 +154,7 @@ router.post('/register', async (req, res) => {
  *               password:
  *                 type: string
  *                 format: password
- *                 example: "********"
+ *                 example: "Password123!"
  *     responses:
  *       200:
  *         description: Successfully authenticated
@@ -132,8 +163,12 @@ router.post('/register', async (req, res) => {
  *             schema:
  *               type: object
  *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Successfully logged in
  *                 token:
  *                   type: string
+ *                   description: JWT token to be used for authenticated requests
  *                   example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
  *                 user:
  *                   type: object
@@ -144,8 +179,32 @@ router.post('/register', async (req, res) => {
  *                     email:
  *                       type: string
  *                       example: "user@example.com"
+ *             examples:
+ *               success:
+ *                 value:
+ *                   message: Successfully logged in
+ *                   token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *                   user:
+ *                     id: "123e4567-e89b-12d3-a456-426614174000"
+ *                     email: "user@example.com"
+ *       400:
+ *         description: Missing required fields
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: Required fields are missing
  *       401:
  *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: Invalid credentials
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: Error during login
  */
 router.post('/login', async (req, res) => {
     try {
@@ -206,11 +265,22 @@ router.post('/login', async (req, res) => {
  * /api/auth/logout:
  *   post:
  *     summary: Logout user
- *     description: Invalidate the user's session
+ *     description: |
+ *       Invalidates the user's JWT token by adding it to a blacklist.
+ *       Requires a valid JWT token in the Authorization header.
+ *       Once logged out, the token cannot be reused for authentication.
  *     tags:
  *       - Authentication
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: Authorization
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bearer token from login
+ *         example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
  *     responses:
  *       200:
  *         description: Successfully logged out
@@ -222,8 +292,34 @@ router.post('/login', async (req, res) => {
  *                 message:
  *                   type: string
  *                   example: Successfully logged out
+ *             example:
+ *               message: Successfully logged out
  *       401:
- *         description: Not authenticated
+ *         description: Authentication error
+ *         content:
+ *           application/json:
+ *             examples:
+ *               noToken:
+ *                 value:
+ *                   message: Authentication token is required
+ *               expiredToken:
+ *                 value:
+ *                   message: Token has expired
+ *               blacklistedToken:
+ *                 value:
+ *                   message: Token has been invalidated
+ *       403:
+ *         description: Invalid token
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: Invalid token
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: Error during logout
  */
 router.post('/logout', authenticateToken, async (req: AuthRequest, res) => {
     try {
