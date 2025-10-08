@@ -20,6 +20,12 @@ const createScheduleMock = jest.spyOn(ScheduleService, 'createSchedule');
 const buildApp = () => {
     const app = express();
     app.use(express.json());
+    app.use((req, _res, next) => {
+        if (req.headers['x-mock-payload'] === 'function') {
+            req.body.payload = () => {};
+        }
+        next();
+    });
     app.use('/api/schedules', schedulesRouter);
     return app;
 };
@@ -45,26 +51,66 @@ describe('Schedules Routes', () => {
     });
 
     describe('POST /api/schedules', () => {
-        it('returns 201 when a schedule is created successfully', async () => {
-            createScheduleMock.mockResolvedValueOnce({ scheduleId: 'schedule-456' });
+        it('returns 201 with the created schedule when successful', async () => {
+            const createdAt = '2025-10-08T00:00:00.000Z';
+            const scheduleDocument = {
+                toJSON: () => ({
+                    _id: 'schedule-456',
+                    name: 'Daily Report',
+                    cron: '0 9 * * *',
+                    description: 'Sends daily report',
+                    payload: { reportType: 'daily' },
+                    createdBy: 'user-123',
+                    createdAt
+                })
+            } as unknown as Awaited<ReturnType<typeof ScheduleService.createSchedule>>;
+
+            createScheduleMock.mockResolvedValueOnce(scheduleDocument);
 
             const response = await request(app)
                 .post('/api/schedules')
                 .send({
                     name: 'Daily Report',
                     cron: '0 9 * * *',
-                    description: 'Sends daily report'
+                    description: 'Sends daily report',
+                    payload: { reportType: 'daily' }
                 });
 
             expect(response.status).toBe(HttpStatus.CREATED);
-            expect(response.body).toEqual({
-                message: 'Schedule created successfully',
-                scheduleId: 'schedule-456'
-            });
+            expect(response.body).toEqual(scheduleDocument.toJSON());
             expect(createScheduleMock).toHaveBeenCalledWith('user-123', {
                 name: 'Daily Report',
                 cron: '0 9 * * *',
-                description: 'Sends daily report'
+                description: 'Sends daily report',
+                payload: { reportType: 'daily' }
+            });
+        });
+
+        it('omits optional fields when not provided', async () => {
+            const scheduleDocument = {
+                toJSON: () => ({
+                    _id: 'schedule-789',
+                    name: 'Heartbeat',
+                    cron: '*/5 * * * *',
+                    createdBy: 'user-123',
+                    createdAt: '2025-10-08T00:05:00.000Z'
+                })
+            } as unknown as Awaited<ReturnType<typeof ScheduleService.createSchedule>>;
+
+            createScheduleMock.mockResolvedValueOnce(scheduleDocument);
+
+            const response = await request(app)
+                .post('/api/schedules')
+                .send({
+                    name: 'Heartbeat',
+                    cron: '*/5 * * * *'
+                });
+
+            expect(response.status).toBe(HttpStatus.CREATED);
+            expect(response.body).toEqual(scheduleDocument.toJSON());
+            expect(createScheduleMock).toHaveBeenCalledWith('user-123', {
+                name: 'Heartbeat',
+                cron: '*/5 * * * *'
             });
         });
 
@@ -92,6 +138,22 @@ describe('Schedules Routes', () => {
 
             expect(response.status).toBe(HttpStatus.BAD_REQUEST);
             expect(response.body).toEqual({ error: 'Invalid cron expression' });
+        });
+
+        it('returns 400 when payload is not JSON-serializable', async () => {
+            const response = await request(app)
+                .post('/api/schedules')
+                .set('x-mock-payload', 'function')
+                .send({
+                    name: 'Invalid payload job',
+                    cron: '0 12 * * *'
+                });
+
+            expect(response.status).toBe(HttpStatus.BAD_REQUEST);
+            expect(response.body).toEqual({
+                error: 'Invalid payload: must be JSON-serializable'
+            });
+            expect(createScheduleMock).not.toHaveBeenCalled();
         });
 
         it('returns 500 when an unexpected error occurs', async () => {

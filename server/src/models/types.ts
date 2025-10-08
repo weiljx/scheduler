@@ -24,6 +24,7 @@ export interface ISchedule {
     cron: string;
     createdBy: string;
     createdAt?: Date;
+    payload?: unknown;
 }
 
 /**
@@ -33,6 +34,7 @@ export interface CreateScheduleRequest {
     name: string;
     description?: string;
     cron: string;
+    payload?: unknown;
 }
 
 /**

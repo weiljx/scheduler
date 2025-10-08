@@ -16,6 +16,9 @@ const scheduleSchema = new Schema({
         type: String,
         trim: true
     },
+    payload: {
+        type: Schema.Types.Mixed
+    },
     cron: {
         type: String,
         required: [true, 'Cron expression is required'],
