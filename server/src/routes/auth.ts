@@ -62,6 +62,14 @@ router.post('/register', async (req, res) => {
             });
         }
 
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(HttpStatus.BAD_REQUEST).json({
+                message: HttpMessages.INVALID_EMAIL
+            });
+        }
+
         // Check if user already exists
         const existingUser = await User.findOne({ email });
         if (existingUser) {

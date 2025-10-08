@@ -35,4 +35,5 @@ export const HttpMessages = {
     // Generic messages
     INTERNAL_ERROR: 'An internal error occurred',
     MISSING_FIELDS: 'Required fields are missing',
+    INVALID_EMAIL: 'Invalid email format',
 } as const;
