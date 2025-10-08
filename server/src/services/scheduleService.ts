@@ -33,6 +33,38 @@ export class ScheduleService {
 
         return created;
     }
+
+    static isJsonSerializable(value: unknown): boolean {
+        if (value === null) {
+            return true;
+        }
+
+        switch (typeof value) {
+            case 'string':
+            case 'boolean':
+                return true;
+            case 'number':
+                return Number.isFinite(value);
+            case 'object':
+                if (Array.isArray(value)) {
+                    return value.every((item) => ScheduleService.isJsonSerializable(item));
+                }
+                if (ScheduleService.isPlainObject(value)) {
+                    return Object.values(value).every((item) => ScheduleService.isJsonSerializable(item));
+                }
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    private static isPlainObject(value: unknown): value is Record<string, unknown> {
+        if (value === null || typeof value !== 'object') {
+            return false;
+        }
+        const prototype = Object.getPrototypeOf(value);
+        return prototype === Object.prototype || prototype === null;
+    }
 }
 
 export default ScheduleService;

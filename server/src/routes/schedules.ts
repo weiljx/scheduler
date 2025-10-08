@@ -4,38 +4,6 @@ import { HttpStatus, HttpMessages } from '../constants/httpStatus.js';
 import type { CreateScheduleRequest } from '../models/types.js';
 import { ScheduleService } from '../services/scheduleService.js';
 
-const isPlainObject = (value: unknown): value is Record<string, unknown> => {
-    if (value === null || typeof value !== 'object') {
-        return false;
-    }
-    const prototype = Object.getPrototypeOf(value);
-    return prototype === Object.prototype || prototype === null;
-};
-
-const isJsonSerializable = (value: unknown): boolean => {
-    if (value === null) {
-        return true;
-    }
-
-    switch (typeof value) {
-        case 'string':
-        case 'boolean':
-            return true;
-        case 'number':
-            return Number.isFinite(value);
-        case 'object':
-            if (Array.isArray(value)) {
-                return value.every(isJsonSerializable);
-            }
-            if (isPlainObject(value)) {
-                return Object.values(value).every(isJsonSerializable);
-            }
-            return false;
-        default:
-            return false;
-    }
-};
-
 const router = Router();
 
 /**
@@ -151,7 +119,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
             return res.status(HttpStatus.BAD_REQUEST).json({ error: HttpMessages.MISSING_FIELDS });
         }
 
-        if (payload !== undefined && !isJsonSerializable(payload)) {
+        if (payload !== undefined && !ScheduleService.isJsonSerializable(payload)) {
             return res.status(HttpStatus.BAD_REQUEST).json({
                 error: 'Invalid payload: must be JSON-serializable'
             });
