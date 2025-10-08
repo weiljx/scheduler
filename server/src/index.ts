@@ -38,8 +38,19 @@ const swaggerOptions = {
   apis: ['./src/**/*.ts'],
 };
 
-const swaggerSpec = swaggerJSDoc(swaggerOptions);
+let swaggerSpec;
+try {
+  swaggerSpec = swaggerJSDoc(swaggerOptions);
+} catch (error) {
+  console.error('Failed to generate Swagger specification:', error);
+  throw error;
+}
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception detected:', error);
+  process.exit(1);
+});
 
 
 app.use('/api', routes);

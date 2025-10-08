@@ -9,11 +9,12 @@ describe('ScheduleService', () => {
     });
 
     describe('createSchedule', () => {
-        it('persists a schedule when the cron expression is valid', async () => {
+        it('persists a schedule with payload when the cron expression is valid', async () => {
             const payload = {
                 name: 'Morning Sync',
                 description: 'Daily stand-up meeting',
-                cron: '* * * * *'
+                cron: '* * * * *',
+                payload: { task: 'stand-up' }
             };
             const createdSchedule = {
                 id: 'schedule-456'
@@ -29,9 +30,34 @@ describe('ScheduleService', () => {
                 name: payload.name,
                 description: payload.description,
                 cron: payload.cron,
+                payload: payload.payload,
                 createdBy: userId
             });
-            expect(result).toEqual({ scheduleId: createdSchedule.id });
+            expect(result).toBe(createdSchedule);
+        });
+
+        it('persists a schedule without optional fields', async () => {
+            const payload = {
+                name: 'Hourly Check',
+                cron: '0 * * * *'
+            };
+            const createdSchedule = {
+                id: 'schedule-789'
+            } as Awaited<ReturnType<typeof Schedule.create>>;
+
+            const createSpy = jest.spyOn(Schedule, 'create')
+                .mockResolvedValueOnce(createdSchedule);
+
+            const result = await ScheduleService.createSchedule(userId, payload);
+
+            expect(createSpy).toHaveBeenCalledWith({
+                name: payload.name,
+                description: undefined,
+                cron: payload.cron,
+                payload: undefined,
+                createdBy: userId
+            });
+            expect(result).toBe(createdSchedule);
         });
 
         it('throws when the cron expression is invalid', async () => {
