@@ -30,7 +30,7 @@ export class ScheduleService {
             createdBy: userId,
         });
 
-        return { scheduleId: created._id.toString() };
+        return { scheduleId: created.id };
     }
 }
 
