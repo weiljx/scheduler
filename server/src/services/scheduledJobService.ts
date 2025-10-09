@@ -3,7 +3,65 @@ import ScheduledJob from '../models/scheduledJob.js';
 import Schedule from '../models/schedule.js';
 import type { IScheduledJob, ScheduledJobLeanDocument } from '../models/types.js';
 
+const ALLOWED_STATUSES: ReadonlyArray<IScheduledJob['status']> = ['pending', 'success', 'failed'];
+
+export class ScheduledJobValidationError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'ScheduledJobValidationError';
+    }
+}
+
 export class ScheduledJobService {
+    /**
+     * Normalizes a status filter value from incoming requests.
+     *
+     * @param status Raw status filter value (e.g., from query parameters)
+     * @returns Normalized status or undefined if not provided
+     * @throws {ScheduledJobValidationError} When the value cannot be normalized
+     */
+    static normalizeStatusFilter(status: unknown): IScheduledJob['status'] | undefined {
+        if (status === undefined || status === null) {
+            return undefined;
+        }
+
+        if (Array.isArray(status)) {
+            return ScheduledJobService.normalizeStatusFilter(status[0]);
+        }
+
+        if (typeof status !== 'string') {
+            throw new ScheduledJobValidationError('Invalid status filter');
+        }
+
+        const normalized = status.trim().toLowerCase();
+
+        if (normalized.length === 0 || !ALLOWED_STATUSES.includes(normalized as IScheduledJob['status'])) {
+            throw new ScheduledJobValidationError('Invalid status filter');
+        }
+
+        return normalized as IScheduledJob['status'];
+    }
+
+    /**
+     * Validates and normalizes a schedule identifier string.
+     *
+     * @param scheduleId Schedule identifier from request params
+     * @returns The normalized schedule identifier
+     * @throws {ScheduledJobValidationError} When the identifier is missing or invalid
+     */
+    static normalizeScheduleId(scheduleId: unknown): string {
+        if (typeof scheduleId !== 'string' || scheduleId.trim().length === 0) {
+            throw new ScheduledJobValidationError('Invalid schedule identifier');
+        }
+
+        const normalized = scheduleId.trim();
+
+        if (!Types.ObjectId.isValid(normalized)) {
+            throw new ScheduledJobValidationError('Invalid schedule identifier');
+        }
+
+        return normalized;
+    }
     /**
      * Retrieves scheduled jobs for a schedule owned by the given user.
      * Always enforces that the schedule belongs to the requesting user.
@@ -18,11 +76,8 @@ export class ScheduledJobService {
         scheduleId: string,
         status?: IScheduledJob['status']
     ): Promise<IScheduledJob[]> {
-        if (!Types.ObjectId.isValid(scheduleId)) {
-            return [];
-        }
-
-        const scheduleObjectId = new Types.ObjectId(scheduleId);
+        const normalizedScheduleId = ScheduledJobService.normalizeScheduleId(scheduleId);
+        const scheduleObjectId = new Types.ObjectId(normalizedScheduleId);
 
         const scheduleExists = await Schedule.exists({
             _id: scheduleObjectId,
@@ -78,11 +133,8 @@ export class ScheduledJobService {
         userId: string,
         scheduleId: string
     ): Promise<IScheduledJob> {
-        if (!Types.ObjectId.isValid(scheduleId)) {
-            throw new Error('Invalid schedule identifier');
-        }
-
-        const scheduleObjectId = new Types.ObjectId(scheduleId);
+        const normalizedScheduleId = ScheduledJobService.normalizeScheduleId(scheduleId);
+        const scheduleObjectId = new Types.ObjectId(normalizedScheduleId);
 
         const scheduleExists = await Schedule.exists({
             _id: scheduleObjectId,

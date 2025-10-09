@@ -251,12 +251,11 @@ describe('Schedules Routes', () => {
         });
 
         it('returns 400 when the schedule identifier is invalid', async () => {
-            createScheduledJobMock.mockRejectedValueOnce(new Error('Invalid schedule identifier'));
-
             const response = await request(app).post(`${basePath}/invalid-id/jobs`);
 
             expect(response.status).toBe(HttpStatus.BAD_REQUEST);
             expect(response.body).toEqual({ error: 'Invalid schedule identifier' });
+            expect(createScheduledJobMock).not.toHaveBeenCalled();
         });
 
         it('returns 404 when the schedule is not found for the user', async () => {

@@ -1,7 +1,7 @@
 import { Types } from 'mongoose';
 import Schedule from '../../models/schedule.js';
 import ScheduledJob from '../../models/scheduledJob.js';
-import { ScheduledJobService } from '../../services/scheduledJobService.js';
+import { ScheduledJobService, ScheduledJobValidationError } from '../../services/scheduledJobService.js';
 
 describe('ScheduledJobService', () => {
     const userId = 'user-123';
@@ -10,11 +10,36 @@ describe('ScheduledJobService', () => {
         jest.restoreAllMocks();
     });
 
-    describe('getScheduledJobs', () => {
-        it('returns an empty array when scheduleId is invalid', async () => {
-            const result = await ScheduledJobService.getScheduledJobs(userId, 'invalid-id');
+    describe('normalizeStatusFilter', () => {
+        it('returns undefined when status is not provided', () => {
+            expect(ScheduledJobService.normalizeStatusFilter(undefined)).toBeUndefined();
+            expect(ScheduledJobService.normalizeStatusFilter(null)).toBeUndefined();
+        });
 
-            expect(result).toEqual([]);
+        it('normalizes string values to lowercase and trims whitespace', () => {
+            expect(ScheduledJobService.normalizeStatusFilter(' success ')).toBe('success');
+            expect(ScheduledJobService.normalizeStatusFilter('PENDING')).toBe('pending');
+        });
+
+        it('handles array inputs by using the first value', () => {
+            expect(ScheduledJobService.normalizeStatusFilter(['failed', 'success'])).toBe('failed');
+        });
+
+        it('throws when the status value is invalid', () => {
+            expect(() => ScheduledJobService.normalizeStatusFilter('invalid')).toThrow(
+                ScheduledJobValidationError
+            );
+            expect(() => ScheduledJobService.normalizeStatusFilter(123)).toThrow(
+                ScheduledJobValidationError
+            );
+        });
+    });
+
+    describe('getScheduledJobs', () => {
+        it('throws a validation error when scheduleId is invalid', async () => {
+            await expect(
+                ScheduledJobService.getScheduledJobs(userId, 'invalid-id')
+            ).rejects.toThrow(ScheduledJobValidationError);
         });
 
         it('returns an empty array when the schedule is not owned by the user', async () => {
@@ -111,10 +136,10 @@ describe('ScheduledJobService', () => {
     });
 
     describe('createScheduledJob', () => {
-        it('throws when scheduleId is invalid', async () => {
+        it('throws a validation error when scheduleId is invalid', async () => {
             await expect(
                 ScheduledJobService.createScheduledJob(userId, 'invalid-id')
-            ).rejects.toThrow('Invalid schedule identifier');
+            ).rejects.toThrow(ScheduledJobValidationError);
         });
 
         it('throws when the schedule does not exist for the user', async () => {
@@ -162,6 +187,29 @@ describe('ScheduledJobService', () => {
                 completedAt: undefined,
                 status: 'pending',
             });
+        });
+    });
+
+    describe('normalizeScheduleId', () => {
+        it('returns the trimmed schedule id when valid', () => {
+            const scheduleId = new Types.ObjectId().toString();
+            const result = ScheduledJobService.normalizeScheduleId(` ${scheduleId} `);
+            expect(result).toBe(scheduleId);
+        });
+
+        it('throws when scheduleId is missing or empty', () => {
+            expect(() => ScheduledJobService.normalizeScheduleId(undefined)).toThrow(
+                ScheduledJobValidationError
+            );
+            expect(() => ScheduledJobService.normalizeScheduleId('   ')).toThrow(
+                ScheduledJobValidationError
+            );
+        });
+
+        it('throws when scheduleId is not a valid ObjectId', () => {
+            expect(() => ScheduledJobService.normalizeScheduleId('invalid-id')).toThrow(
+                ScheduledJobValidationError
+            );
         });
     });
 });

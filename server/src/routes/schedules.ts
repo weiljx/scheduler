@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 import { HttpStatus, HttpMessages } from '../constants/httpStatus.js';
-import type { CreateScheduleRequest, IScheduledJob } from '../models/types.js';
+import type { CreateScheduleRequest } from '../models/types.js';
 import { ScheduleService } from '../services/scheduleService.js';
-import { ScheduledJobService } from '../services/scheduledJobService.js';
+import {
+    ScheduledJobService,
+    ScheduledJobValidationError,
+} from '../services/scheduledJobService.js';
 
 const router = Router();
 
@@ -223,34 +226,16 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
  */
 router.get('/:scheduleId/jobs', authenticateToken, async (req: AuthRequest, res) => {
     try {
-        const { scheduleId } = req.params;
-        const { status } = req.query;
+        const scheduleId = req.params.scheduleId as string;
+        const statusFilter = ScheduledJobService.normalizeStatusFilter(req.query.status);
 
-        if (!scheduleId) {
-            return res.status(HttpStatus.BAD_REQUEST).json({ error: 'Schedule identifier is required' });
-        }
-
-        const rawStatus = Array.isArray(status) ? status[0] : status;
-        if (rawStatus !== undefined && typeof rawStatus !== 'string') {
-            return res.status(HttpStatus.BAD_REQUEST).json({ error: 'Invalid status filter' });
-        }
-
-        const normalizedStatus = typeof rawStatus === 'string' ? rawStatus : undefined;
-        if (
-            normalizedStatus !== undefined &&
-            !['pending', 'success', 'failed'].includes(normalizedStatus)
-        ) {
-            return res.status(HttpStatus.BAD_REQUEST).json({ error: 'Invalid status filter' });
-        }
-
-        const jobs = await ScheduledJobService.getScheduledJobs(
-            req.user!.userId,
-            scheduleId,
-            normalizedStatus as IScheduledJob['status'] | undefined
-        );
+        const jobs = await ScheduledJobService.getScheduledJobs(req.user!.userId, scheduleId, statusFilter);
 
         return res.status(HttpStatus.OK).json(jobs);
     } catch (error) {
+        if (error instanceof ScheduledJobValidationError) {
+            return res.status(HttpStatus.BAD_REQUEST).json({ error: error.message });
+        }
         console.error('Get scheduled jobs error:', error);
         return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: HttpMessages.INTERNAL_ERROR });
     }
@@ -330,24 +315,17 @@ router.get('/:scheduleId/jobs', authenticateToken, async (req: AuthRequest, res)
  */
 router.post('/:scheduleId/jobs', authenticateToken, async (req: AuthRequest, res) => {
     try {
-        const { scheduleId } = req.params;
-
-        if (!scheduleId) {
-            return res.status(HttpStatus.BAD_REQUEST).json({ error: 'Schedule identifier is required' });
-        }
-
+        const scheduleId = ScheduledJobService.normalizeScheduleId(req.params.scheduleId);
         const job = await ScheduledJobService.createScheduledJob(req.user!.userId, scheduleId);
 
         return res.status(HttpStatus.CREATED).json(job);
     } catch (error) {
-        if (error instanceof Error) {
-            if (error.message === 'Invalid schedule identifier') {
-                return res.status(HttpStatus.BAD_REQUEST).json({ error: error.message });
-            }
+        if (error instanceof ScheduledJobValidationError) {
+            return res.status(HttpStatus.BAD_REQUEST).json({ error: error.message });
+        }
 
-            if (error.message === 'Schedule not found') {
-                return res.status(HttpStatus.NOT_FOUND).json({ error: error.message });
-            }
+        if (error instanceof Error && error.message === 'Schedule not found') {
+            return res.status(HttpStatus.NOT_FOUND).json({ error: error.message });
         }
         console.error('Create scheduled job error:', error);
         return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: HttpMessages.INTERNAL_ERROR });
