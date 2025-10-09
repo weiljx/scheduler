@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
 import Schedule from '../../models/schedule.js';
-import ScheduledJob from '../../models/ScheduledJob.js';
+import ScheduledJob from '../../models/scheduledJob.js';
 import { ScheduledJobService } from '../../services/scheduledJobService.js';
 
 describe('ScheduledJobService', () => {

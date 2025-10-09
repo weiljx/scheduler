@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import ScheduledJob from '../models/ScheduledJob.js';
+import ScheduledJob from '../models/scheduledJob.js';
 import Schedule from '../models/schedule.js';
 import type { IScheduledJob, ScheduledJobLeanDocument } from '../models/types.js';
 
@@ -43,21 +43,26 @@ export class ScheduledJobService {
 
         const jobs = await ScheduledJob.find(query)
             .sort({ startedAt: -1 })
-            .lean<ScheduledJobLeanDocument>();
+            .lean<ScheduledJobLeanDocument[]>();
 
-        return jobs.map((job) => {
+        return jobs.map((job): IScheduledJob => {
             const normalizedScheduleId =
-                job.scheduleId instanceof Types.ObjectId
-                    ? job.scheduleId.toString()
-                    : job.scheduleId;
+                typeof job.scheduleId === 'string'
+                    ? job.scheduleId
+                    : job.scheduleId.toString();
 
-            return {
+            const normalizedJob: IScheduledJob = {
                 _id: job._id.toString(),
                 scheduleId: normalizedScheduleId,
                 startedAt: job.startedAt,
-                completedAt: job.completedAt ?? undefined,
                 status: job.status,
             };
+
+            if (job.completedAt) {
+                normalizedJob.completedAt = job.completedAt;
+            }
+
+            return normalizedJob;
         });
     }
 
@@ -92,13 +97,27 @@ export class ScheduledJobService {
             scheduleId: scheduleObjectId,
         });
 
-        return {
-            _id: created._id.toString(),
-            scheduleId: created.scheduleId.toString(),
+        const createdId = created._id as Types.ObjectId;
+        const scheduleReference = created.scheduleId as Types.ObjectId | string;
+
+        const createdIdString = createdId.toString();
+        const scheduleIdString =
+            typeof scheduleReference === 'string'
+                ? scheduleReference
+                : scheduleReference.toString();
+
+        const job: IScheduledJob = {
+            _id: createdIdString,
+            scheduleId: scheduleIdString,
             startedAt: created.startedAt,
-            completedAt: created.completedAt ?? undefined,
             status: created.status,
         };
+
+        if (created.completedAt) {
+            job.completedAt = created.completedAt;
+        }
+
+        return job;
     }
 }
 
