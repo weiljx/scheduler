@@ -3,6 +3,7 @@ import request from 'supertest';
 import { HttpStatus, HttpMessages } from '../../constants/httpStatus.js';
 import schedulesRouter from '../../routes/schedules.js';
 import { ScheduleService } from '../../services/scheduleService.js';
+import { ScheduledJobService } from '../../services/scheduledJobService.js';
 
 jest.mock('../../middleware/auth.js', () => ({
     __esModule: true,
@@ -16,6 +17,8 @@ jest.mock('../../middleware/auth.js', () => ({
 }));
 
 const createScheduleMock = jest.spyOn(ScheduleService, 'createSchedule');
+const getScheduledJobsMock = jest.spyOn(ScheduledJobService, 'getScheduledJobs');
+const createScheduledJobMock = jest.spyOn(ScheduledJobService, 'createScheduledJob');
 
 const buildApp = () => {
     const app = express();
@@ -165,6 +168,109 @@ describe('Schedules Routes', () => {
                     name: 'Monthly summary',
                     cron: '0 0 1 * *'
                 });
+
+            expect(response.status).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
+            expect(response.body).toEqual({ error: HttpMessages.INTERNAL_ERROR });
+        });
+    });
+
+    describe('GET /api/schedules/:scheduleId/jobs', () => {
+        const basePath = '/api/schedules';
+        const scheduleId = '671f2e98a3f0e91234bfc812';
+
+        it('returns 200 with scheduled jobs and delegates to the service', async () => {
+            const jobs = [
+                {
+                    _id: 'job-1',
+                    scheduleId,
+                    startedAt: '2024-04-05T09:00:00.000Z',
+                    status: 'success',
+                },
+            ];
+
+            getScheduledJobsMock.mockResolvedValueOnce(jobs);
+
+            const response = await request(app)
+                .get(`${basePath}/${scheduleId}/jobs`)
+                .query({ status: 'success' });
+
+            expect(response.status).toBe(HttpStatus.OK);
+            expect(response.body).toEqual(jobs);
+            expect(getScheduledJobsMock).toHaveBeenCalledWith('user-123', scheduleId, 'success');
+        });
+
+        it('returns 400 when the status filter is invalid', async () => {
+            const response = await request(app)
+                .get(`${basePath}/${scheduleId}/jobs`)
+                .query({ status: 'invalid-status' });
+
+            expect(response.status).toBe(HttpStatus.BAD_REQUEST);
+            expect(response.body).toEqual({ error: 'Invalid status filter' });
+            expect(getScheduledJobsMock).not.toHaveBeenCalled();
+        });
+
+        it('returns 200 when no status filter is provided', async () => {
+            getScheduledJobsMock.mockResolvedValueOnce([]);
+
+            const response = await request(app).get(`${basePath}/${scheduleId}/jobs`);
+
+            expect(response.status).toBe(HttpStatus.OK);
+            expect(response.body).toEqual([]);
+            expect(getScheduledJobsMock).toHaveBeenCalledWith('user-123', scheduleId, undefined);
+        });
+
+        it('returns 500 when an unexpected error occurs', async () => {
+            getScheduledJobsMock.mockRejectedValueOnce(new Error('Database error'));
+
+            const response = await request(app).get(`${basePath}/${scheduleId}/jobs`);
+
+            expect(response.status).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
+            expect(response.body).toEqual({ error: HttpMessages.INTERNAL_ERROR });
+        });
+    });
+
+    describe('POST /api/schedules/:scheduleId/jobs', () => {
+        const basePath = '/api/schedules';
+        const scheduleId = '671f2e98a3f0e91234bfc812';
+
+        it('returns 201 with the created scheduled job when successful', async () => {
+            const createdJob = {
+                _id: 'job-123',
+                scheduleId,
+                startedAt: '2024-04-05T09:00:00.000Z',
+                status: 'pending',
+            };
+
+            createScheduledJobMock.mockResolvedValueOnce(createdJob);
+
+            const response = await request(app).post(`${basePath}/${scheduleId}/jobs`);
+
+            expect(response.status).toBe(HttpStatus.CREATED);
+            expect(response.body).toEqual(createdJob);
+            expect(createScheduledJobMock).toHaveBeenCalledWith('user-123', scheduleId);
+        });
+
+        it('returns 400 when the schedule identifier is invalid', async () => {
+            const response = await request(app).post(`${basePath}/invalid-id/jobs`);
+
+            expect(response.status).toBe(HttpStatus.BAD_REQUEST);
+            expect(response.body).toEqual({ error: 'Invalid schedule identifier' });
+            expect(createScheduledJobMock).not.toHaveBeenCalled();
+        });
+
+        it('returns 404 when the schedule is not found for the user', async () => {
+            createScheduledJobMock.mockRejectedValueOnce(new Error('Schedule not found'));
+
+            const response = await request(app).post(`${basePath}/${scheduleId}/jobs`);
+
+            expect(response.status).toBe(HttpStatus.NOT_FOUND);
+            expect(response.body).toEqual({ error: 'Schedule not found' });
+        });
+
+        it('returns 500 when an unexpected error occurs', async () => {
+            createScheduledJobMock.mockRejectedValueOnce(new Error('Database failure'));
+
+            const response = await request(app).post(`${basePath}/${scheduleId}/jobs`);
 
             expect(response.status).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
             expect(response.body).toEqual({ error: HttpMessages.INTERNAL_ERROR });

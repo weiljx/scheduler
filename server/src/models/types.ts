@@ -1,3 +1,5 @@
+import type { Types } from 'mongoose';
+
 /**
  * Represents the payload structure of a JWT token
  */
@@ -26,6 +28,25 @@ export interface ISchedule {
     createdAt?: Date;
     payload?: unknown;
 }
+
+/**
+ * Represents a scheduled job in the system
+ */
+export interface IScheduledJob {
+    _id?: string;
+    scheduleId: string;
+    startedAt: Date;
+    completedAt?: Date;
+    status: 'pending' | 'success' | 'failed';
+}
+
+export type ScheduledJobLeanDocument = {
+    _id: Types.ObjectId;
+    scheduleId: Types.ObjectId | string;
+    startedAt: Date;
+    completedAt?: Date;
+    status: IScheduledJob['status'];
+};
 
 /**
  * Request body for creating a new schedule
