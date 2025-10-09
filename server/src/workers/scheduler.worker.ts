@@ -1,4 +1,11 @@
-type SchedulerTickHandler = (now: Date) => Promise<void>;
+import Schedule from '../models/schedule.js';
+
+import { CronExpressionParser } from 'cron-parser';
+
+type SchedulerTickHandler = (
+    now: Date,
+    context: { intervalMs: number; timezone?: string }
+) => Promise<number>;
 
 type SchedulerLogger = Pick<
     Console,
@@ -22,13 +29,71 @@ export interface SchedulerWorkerOptions {
     tickHandler?: SchedulerTickHandler;
     logger?: SchedulerLogger;
     process?: ProcessLike;
+    timezone?: string;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const LOG_PREFIX = '[SchedulerWorker]';
 
-const defaultTickHandler: SchedulerTickHandler = async () => {
-    /* no-op placeholder until processing is implemented */
+const defaultTickHandler: SchedulerTickHandler = async (now, context) => {
+    const windowEnd = now.getTime() + context.intervalMs;
+    const windowStart = now.getTime() - context.intervalMs;
+    const schedules = await Schedule.find({}, { cron: 1 }).lean().exec();
+
+    let dueCount = 0;
+
+    for (const schedule of schedules) {
+        const cronExpression = schedule.cron;        
+
+        if (typeof cronExpression !== 'string' || cronExpression.length === 0) {
+            continue;
+        }
+
+        const baseOptions =
+            context.timezone !== undefined
+                ? { tz: context.timezone }
+                : undefined;
+
+        try {
+            const evaluationDate = new Date(now.getTime() - 1);
+            const nextExpression = CronExpressionParser.parse(
+                cronExpression,
+                baseOptions
+                    ? { ...baseOptions, currentDate: evaluationDate }
+                    : { currentDate: evaluationDate }
+            );
+
+            const nextOccurrenceTime = nextExpression
+                .next()
+                .toDate()
+                .getTime();
+
+            if (nextOccurrenceTime <= windowEnd) {
+                dueCount += 1;
+                continue;
+            }
+
+            const previousExpression = CronExpressionParser.parse(
+                cronExpression,
+                baseOptions
+                    ? { ...baseOptions, currentDate: now }
+                    : { currentDate: now }
+            );
+
+            const previousOccurrenceTime = previousExpression
+                .prev()
+                .toDate()
+                .getTime();
+
+            if (previousOccurrenceTime >= windowStart) {
+                dueCount += 1;
+            }
+        } catch (error) {
+            // Ignore invalid cron expressions; validation occurs at creation time.
+        }
+    }
+
+    return dueCount;
 };
 
 function normalizeBoolean(
@@ -100,6 +165,7 @@ export class SchedulerWorker {
     private readonly tickHandler: SchedulerTickHandler;
     private readonly logger: SchedulerLogger;
     private readonly proc: ProcessLike;
+    private readonly timezone: string | undefined;
     private timer: ReturnType<typeof setInterval> | null = null;
     private running = false;
     private started = false;
@@ -125,6 +191,7 @@ export class SchedulerWorker {
 
         this.tickHandler = options.tickHandler ?? defaultTickHandler;
         this.logger = options.logger ?? console;
+        this.timezone = options.timezone ?? this.proc.env.SCHEDULER_TIMEZONE;
     }
 
     start(): void {
@@ -204,11 +271,22 @@ export class SchedulerWorker {
             const startedAt = new Date();
 
             try {
-                await this.tickHandler(startedAt);
+                const tickContext =
+                    this.timezone !== undefined
+                        ? {
+                              intervalMs: this.intervalMs,
+                              timezone: this.timezone,
+                          }
+                        : { intervalMs: this.intervalMs };
+
+                const scheduleCount = await this.tickHandler(
+                    startedAt,
+                    tickContext
+                );
                 this.logger.debug?.(
                     `${LOG_PREFIX} Tick completed in ${
                         Date.now() - startedAt.getTime()
-                    }ms`
+                    }ms (dueSchedules=${scheduleCount})`
                 );
             } catch (error) {
                 this.logger.error?.(`${LOG_PREFIX} Tick failed`, error);
