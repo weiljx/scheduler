@@ -28,6 +28,17 @@ export interface ISchedule {
 }
 
 /**
+ * Represents a scheduled job in the system
+ */
+export interface IScheduledJob {
+    _id?: string;
+    scheduleId: string;
+    startedAt: Date;
+    completedAt?: Date;
+    status: 'pending' | 'success' | 'failed';
+}
+
+/**
  * Request body for creating a new schedule
  */
 export interface CreateScheduleRequest {
