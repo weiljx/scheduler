@@ -36,59 +36,40 @@ const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const LOG_PREFIX = '[SchedulerWorker]';
 
 const defaultTickHandler: SchedulerTickHandler = async (now, context) => {
-    const windowEnd = now.getTime() + context.intervalMs;
     const windowStart = now.getTime() - context.intervalMs;
+    const windowEnd = now.getTime();
     const schedules = await Schedule.find({}, { cron: 1 }).lean().exec();
 
     let dueCount = 0;
 
     for (const schedule of schedules) {
-        const cronExpression = schedule.cron;        
+        const cronExpression = schedule.cron;
 
         if (typeof cronExpression !== 'string' || cronExpression.length === 0) {
             continue;
         }
 
-        const baseOptions =
+        const parserOptions =
             context.timezone !== undefined
-                ? { tz: context.timezone }
-                : undefined;
+                ? { currentDate: now, tz: context.timezone }
+                : { currentDate: now };
 
         try {
-            const evaluationDate = new Date(now.getTime() - 1);
-            const nextExpression = CronExpressionParser.parse(
+            const previousOccurrence = CronExpressionParser.parse(
                 cronExpression,
-                baseOptions
-                    ? { ...baseOptions, currentDate: evaluationDate }
-                    : { currentDate: evaluationDate }
-            );
-
-            const nextOccurrenceTime = nextExpression
-                .next()
-                .toDate()
-                .getTime();
-
-            if (nextOccurrenceTime <= windowEnd) {
-                dueCount += 1;
-                continue;
-            }
-
-            const previousExpression = CronExpressionParser.parse(
-                cronExpression,
-                baseOptions
-                    ? { ...baseOptions, currentDate: now }
-                    : { currentDate: now }
-            );
-
-            const previousOccurrenceTime = previousExpression
+                parserOptions
+            )
                 .prev()
                 .toDate()
                 .getTime();
 
-            if (previousOccurrenceTime >= windowStart) {
+            if (
+                previousOccurrence >= windowStart &&
+                previousOccurrence <= windowEnd
+            ) {
                 dueCount += 1;
             }
-        } catch (error) {
+        } catch {
             // Ignore invalid cron expressions; validation occurs at creation time.
         }
     }
