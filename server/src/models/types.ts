@@ -37,7 +37,7 @@ export interface IScheduledJob {
     scheduleId: string;
     startedAt: Date;
     completedAt?: Date;
-    status: 'pending' | 'success' | 'failed';
+    status: 'pending' | 'started' | 'success' | 'failed';
 }
 
 /**

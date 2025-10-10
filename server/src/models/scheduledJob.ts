@@ -23,7 +23,7 @@ const scheduledJobSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'success', 'failed'],
+      enum: ['pending', 'started', 'success', 'failed'],
       default: 'pending',
       index: true,
     }    
