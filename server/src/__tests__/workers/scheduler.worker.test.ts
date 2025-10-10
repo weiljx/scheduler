@@ -1,4 +1,9 @@
 import { createSchedulerWorker, type SchedulerWorkerOptions } from '../../workers/scheduler.worker.js';
+import { ScheduledJobService } from '../../services/scheduledJobService.js';
+import type {
+    SchedulerTickContext,
+    SchedulerTickResult,
+} from '../../models/types.js';
 
 type Signal = 'SIGINT' | 'SIGTERM';
 
@@ -48,7 +53,21 @@ describe('SchedulerWorker', () => {
     it('does not start when disabled', async () => {
         jest.useFakeTimers();
 
-        const tickHandler = jest.fn().mockResolvedValue(0);
+        const tickHandler = jest.fn<
+            Promise<SchedulerTickResult>,
+            [Date, SchedulerTickContext]
+        >().mockResolvedValue({ dueSchedules: [] });
+        const createJobSpy = jest.spyOn(
+            ScheduledJobService,
+            'createScheduledJob'
+        ).mockResolvedValue({
+            _id: 'job',
+            scheduleId: 'schedule',
+            startedAt: new Date(),
+            status: 'pending',
+        } as unknown as Awaited<
+            ReturnType<typeof ScheduledJobService.createScheduledJob>
+        >);
         const processMock = createProcessMock();
 
         const worker = createSchedulerWorker({
@@ -66,6 +85,7 @@ describe('SchedulerWorker', () => {
 
         expect(tickHandler).not.toHaveBeenCalled();
         expect(processMock.on).not.toHaveBeenCalled();
+        expect(createJobSpy).not.toHaveBeenCalled();
 
         await worker.stop();
     });
@@ -73,7 +93,25 @@ describe('SchedulerWorker', () => {
     it('invokes the tick handler immediately and on the configured interval', async () => {
         jest.useFakeTimers();
 
-        const tickHandler = jest.fn().mockResolvedValue(1);
+        const tickHandler = jest
+            .fn<Promise<SchedulerTickResult>, [Date, SchedulerTickContext]>()
+            .mockResolvedValueOnce({
+                dueSchedules: [{ scheduleId: 'schedule-1', userId: 'user-1' }],
+            })
+            .mockResolvedValueOnce({
+                dueSchedules: [{ scheduleId: 'schedule-2', userId: 'user-2' }],
+            });
+        const createJobSpy = jest.spyOn(
+            ScheduledJobService,
+            'createScheduledJob'
+        ).mockResolvedValue({
+            _id: 'job',
+            scheduleId: 'schedule',
+            startedAt: new Date(),
+            status: 'pending',
+        } as unknown as Awaited<
+            ReturnType<typeof ScheduledJobService.createScheduledJob>
+        >);
         const processMock = createProcessMock();
         const loggerMock = createLoggerMock();
 
@@ -97,11 +135,15 @@ describe('SchedulerWorker', () => {
             timezone: 'UTC',
         });
         expect(processMock.on).toHaveBeenCalledTimes(2);
+        expect(createJobSpy).toHaveBeenCalledTimes(1);
+        expect(createJobSpy).toHaveBeenCalledWith('user-1', 'schedule-1');
 
         jest.advanceTimersByTime(1_000);
         await flushMicrotasks();
 
         expect(tickHandler).toHaveBeenCalledTimes(2);
+        expect(createJobSpy).toHaveBeenCalledTimes(2);
+        expect(createJobSpy).toHaveBeenLastCalledWith('user-2', 'schedule-2');
         expect(loggerMock.debug).toHaveBeenCalled();
 
         await worker.stop();
@@ -113,13 +155,31 @@ describe('SchedulerWorker', () => {
     it('skips overlapping ticks while a previous tick is running', async () => {
         jest.useFakeTimers();
 
-        let resolveTick: ((value: number) => void) | undefined;
-        const tickHandler = jest.fn(
-            () =>
-                new Promise<number>((resolve) => {
+        let resolveTick: ((value: SchedulerTickResult) => void) | undefined;
+        const tickHandler = jest.fn<
+            Promise<SchedulerTickResult>,
+            [Date, SchedulerTickContext]
+        >(() => {
+            if (resolveTick === undefined) {
+                return new Promise<SchedulerTickResult>((resolve) => {
                     resolveTick = resolve;
-                })
-        );
+                });
+            }
+
+            return Promise.resolve({ dueSchedules: [] });
+        });
+
+        const createJobSpy = jest.spyOn(
+            ScheduledJobService,
+            'createScheduledJob'
+        ).mockResolvedValue({
+            _id: 'job',
+            scheduleId: 'schedule',
+            startedAt: new Date(),
+            status: 'pending',
+        } as unknown as Awaited<
+            ReturnType<typeof ScheduledJobService.createScheduledJob>
+        >);
 
         const processMock = createProcessMock();
         const loggerMock = createLoggerMock();
@@ -141,8 +201,10 @@ describe('SchedulerWorker', () => {
         await flushMicrotasks();
 
         expect(tickHandler).toHaveBeenCalledTimes(1);
+        expect(createJobSpy).not.toHaveBeenCalled();
 
-        resolveTick?.(1);
+        resolveTick?.({ dueSchedules: [] });
+        resolveTick = undefined;
         await flushMicrotasks();
 
         jest.advanceTimersByTime(1_000);
@@ -150,7 +212,7 @@ describe('SchedulerWorker', () => {
 
         expect(tickHandler).toHaveBeenCalledTimes(2);
 
-        resolveTick?.(1);
+        resolveTick?.({ dueSchedules: [] });
         await flushMicrotasks();
 
         await worker.stop();
@@ -159,18 +221,32 @@ describe('SchedulerWorker', () => {
         expect(processMock.off).toHaveBeenCalledTimes(2);
         expect(loggerMock.error).not.toHaveBeenCalled();
         expect(loggerMock.warn).not.toHaveBeenCalled();
+        expect(createJobSpy).not.toHaveBeenCalled();
     });
 
     it('awaits the in-flight tick when stopping', async () => {
         jest.useFakeTimers();
 
-        let resolveTick: ((value: number) => void) | undefined;
-        const tickHandler = jest.fn(
+        let resolveTick: ((value: SchedulerTickResult) => void) | undefined;
+        const tickHandler = jest
+            .fn<Promise<SchedulerTickResult>, [Date, SchedulerTickContext]>(
             () =>
-                new Promise<number>((resolve) => {
+                new Promise<SchedulerTickResult>((resolve) => {
                     resolveTick = resolve;
                 })
-        );
+            );
+
+        const createJobSpy = jest.spyOn(
+            ScheduledJobService,
+            'createScheduledJob'
+        ).mockResolvedValue({
+            _id: 'job',
+            scheduleId: 'schedule',
+            startedAt: new Date(),
+            status: 'pending',
+        } as unknown as Awaited<
+            ReturnType<typeof ScheduledJobService.createScheduledJob>
+        >);
 
         const processMock = createProcessMock();
         const loggerMock = createLoggerMock();
@@ -197,11 +273,12 @@ describe('SchedulerWorker', () => {
         await flushMicrotasks();
         expect(stopResolved).toBe(false);
 
-        resolveTick?.(1);
+        resolveTick?.({ dueSchedules: [] });
         await stopPromise;
 
         expect(stopResolved).toBe(true);
         expect(processMock.off).toHaveBeenCalledTimes(2);
         expect(loggerMock.error).not.toHaveBeenCalled();
+        expect(createJobSpy).not.toHaveBeenCalled();
     });
 });

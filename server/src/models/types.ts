@@ -60,12 +60,27 @@ export interface SchedulerTickContext {
 }
 
 /**
+ * Represents a schedule due for execution in the current tick.
+ */
+export interface SchedulerTickDueSchedule {
+    scheduleId: string;
+    userId: string;
+}
+
+/**
+ * Result returned by scheduler tick handlers.
+ */
+export interface SchedulerTickResult {
+    dueSchedules: SchedulerTickDueSchedule[];
+}
+
+/**
  * Shape of the scheduler worker tick handler.
  */
 export type SchedulerTickHandler = (
     now: Date,
     context: SchedulerTickContext
-) => Promise<number>;
+) => Promise<SchedulerTickResult>;
 
 /**
  * Logger surface that the scheduler worker relies on.

@@ -8,7 +8,10 @@ import type {
     SchedulerProcessLike,
     SchedulerWorkerOptions,
     SchedulerTickContext,
+    SchedulerTickResult,
+    SchedulerTickDueSchedule,
 } from '../models/types.js';
+import { ScheduledJobService } from '../services/scheduledJobService.js';
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const LOG_PREFIX = '[SchedulerWorker]';
@@ -16,17 +19,42 @@ const LOG_PREFIX = '[SchedulerWorker]';
 const defaultTickHandler: SchedulerTickHandler = async (
     now,
     context: SchedulerTickContext
-) => {
+): Promise<SchedulerTickResult> => {
     const windowStart = now.getTime() - context.intervalMs;
     const windowEnd = now.getTime();
-    const schedules = await Schedule.find({}, { cron: 1 }).lean().exec();
+    const schedules = await Schedule.find({}, { cron: 1, createdBy: 1 })
+        .lean()
+        .exec();
 
-    let dueCount = 0;
+    const dueSchedules: SchedulerTickDueSchedule[] = [];
 
     for (const schedule of schedules) {
-        const cronExpression = schedule.cron;
+        const cronExpression = (schedule as { cron?: string }).cron;
 
         if (typeof cronExpression !== 'string' || cronExpression.length === 0) {
+            continue;
+        }
+
+        const scheduleIdRaw = (schedule as { _id?: unknown })._id;
+        const createdBy = (schedule as { createdBy?: unknown }).createdBy;
+
+        if (
+            scheduleIdRaw === undefined ||
+            scheduleIdRaw === null ||
+            typeof createdBy !== 'string'
+        ) {
+            continue;
+        }
+
+        const scheduleId =
+            typeof scheduleIdRaw === 'string'
+                ? scheduleIdRaw
+                : typeof (scheduleIdRaw as { toString?: () => string }).toString ===
+                  'function'
+                ? (scheduleIdRaw as { toString: () => string }).toString()
+                : undefined;
+
+        if (!scheduleId) {
             continue;
         }
 
@@ -48,14 +76,19 @@ const defaultTickHandler: SchedulerTickHandler = async (
                 previousOccurrence >= windowStart &&
                 previousOccurrence <= windowEnd
             ) {
-                dueCount += 1;
+                dueSchedules.push({
+                    scheduleId,
+                    userId: createdBy,
+                });
             }
         } catch {
             // Ignore invalid cron expressions; validation occurs at creation time.
         }
     }
 
-    return dueCount;
+    return {
+        dueSchedules,
+    };
 };
 
 function normalizeBoolean(
@@ -243,14 +276,33 @@ export class SchedulerWorker {
                           }
                         : { intervalMs: this.intervalMs };
 
-                const scheduleCount = await this.tickHandler(
+                const tickResult = await this.tickHandler(
                     startedAt,
                     tickContext
                 );
+
+                let createdJobs = 0;
+
+                for (const due of tickResult.dueSchedules) {
+                    try {
+                        await ScheduledJobService.createScheduledJob(
+                            due.userId,
+                            due.scheduleId
+                        );
+                        createdJobs += 1;
+                    } catch (error) {
+                        this.logger.error?.(
+                            `${LOG_PREFIX} Failed to record scheduled job for schedule ${due.scheduleId}`,
+                            error
+                        );
+                    }
+                }
+
+                const dueCount = tickResult.dueSchedules.length;
                 this.logger.debug?.(
                     `${LOG_PREFIX} Tick completed in ${
                         Date.now() - startedAt.getTime()
-                    }ms (dueSchedules=${scheduleCount})`
+                    }ms (dueSchedules=${dueCount}, createdJobs=${createdJobs})`
                 );
             } catch (error) {
                 this.logger.error?.(`${LOG_PREFIX} Tick failed`, error);
