@@ -40,6 +40,9 @@ export interface IScheduledJob {
     status: 'pending' | 'success' | 'failed';
 }
 
+/**
+ * Lean version of ScheduledJob for performance-sensitive queries
+ */
 export type ScheduledJobLeanDocument = {
     _id: Types.ObjectId;
     scheduleId: Types.ObjectId | string;
@@ -47,6 +50,57 @@ export type ScheduledJobLeanDocument = {
     completedAt?: Date;
     status: IScheduledJob['status'];
 };
+
+/**
+ * Context information passed to scheduler tick handlers.
+ */
+export interface SchedulerTickContext {
+    intervalMs: number;
+    timezone?: string;
+}
+
+/**
+ * Shape of the scheduler worker tick handler.
+ */
+export type SchedulerTickHandler = (
+    now: Date,
+    context: SchedulerTickContext
+) => Promise<number>;
+
+/**
+ * Logger surface that the scheduler worker relies on.
+ */
+export type SchedulerLogger = Pick<
+    Console,
+    'log' | 'info' | 'warn' | 'error' | 'debug'
+>;
+
+/**
+ * OS signals that the worker handles to shutdown gracefully.
+ */
+export type SchedulerSignal = 'SIGINT' | 'SIGTERM';
+
+/**
+ * Minimal process contract used by the worker for env access and signal hooks.
+ */
+export interface SchedulerProcessLike {
+    env: Record<string, string | undefined>;
+    on(signal: SchedulerSignal, handler: () => void): void;
+    off?(signal: SchedulerSignal, handler: () => void): void;
+    removeListener?(signal: SchedulerSignal, handler: () => void): void;
+}
+
+/**
+ * Configuration accepted by the scheduler worker factory.
+ */
+export interface SchedulerWorkerOptions {
+    enabled?: boolean;
+    intervalMs?: number;
+    tickHandler?: SchedulerTickHandler;
+    logger?: SchedulerLogger;
+    process?: SchedulerProcessLike;
+    timezone?: string;
+}
 
 /**
  * Request body for creating a new schedule

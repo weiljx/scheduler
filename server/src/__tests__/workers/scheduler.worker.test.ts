@@ -150,6 +150,9 @@ describe('SchedulerWorker', () => {
 
         expect(tickHandler).toHaveBeenCalledTimes(2);
 
+        resolveTick?.(1);
+        await flushMicrotasks();
+
         await worker.stop();
         await flushMicrotasks();
 

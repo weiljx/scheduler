@@ -1,41 +1,22 @@
 import Schedule from '../models/schedule.js';
 
 import { CronExpressionParser } from 'cron-parser';
-
-type SchedulerTickHandler = (
-    now: Date,
-    context: { intervalMs: number; timezone?: string }
-) => Promise<number>;
-
-type SchedulerLogger = Pick<
-    Console,
-    'log' | 'info' | 'warn' | 'error' | 'debug'
->;
-
-type Signal = 'SIGINT' | 'SIGTERM';
-
-type ProcessEnv = Record<string, string | undefined>;
-
-interface ProcessLike {
-    env: ProcessEnv;
-    on(signal: Signal, handler: () => void): void;
-    off?(signal: Signal, handler: () => void): void;
-    removeListener?(signal: Signal, handler: () => void): void;
-}
-
-export interface SchedulerWorkerOptions {
-    enabled?: boolean;
-    intervalMs?: number;
-    tickHandler?: SchedulerTickHandler;
-    logger?: SchedulerLogger;
-    process?: ProcessLike;
-    timezone?: string;
-}
+import type {
+    SchedulerTickHandler,
+    SchedulerLogger,
+    SchedulerSignal,
+    SchedulerProcessLike,
+    SchedulerWorkerOptions,
+    SchedulerTickContext,
+} from '../models/types.js';
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const LOG_PREFIX = '[SchedulerWorker]';
 
-const defaultTickHandler: SchedulerTickHandler = async (now, context) => {
+const defaultTickHandler: SchedulerTickHandler = async (
+    now,
+    context: SchedulerTickContext
+) => {
     const windowStart = now.getTime() - context.intervalMs;
     const windowEnd = now.getTime();
     const schedules = await Schedule.find({}, { cron: 1 }).lean().exec();
@@ -112,13 +93,15 @@ function normalizeInterval(value: string | undefined, fallback: number): number 
     return parsed;
 }
 
-function resolveProcess(customProcess?: ProcessLike): ProcessLike {
+function resolveProcess(
+    customProcess?: SchedulerProcessLike
+): SchedulerProcessLike {
     if (customProcess) {
         return customProcess;
     }
 
     const candidate = (globalThis as { process?: unknown }).process as
-        | ProcessLike
+        | SchedulerProcessLike
         | undefined;
 
     if (candidate && typeof candidate.on === 'function' && candidate.env) {
@@ -145,14 +128,14 @@ export class SchedulerWorker {
     private readonly intervalMs: number;
     private readonly tickHandler: SchedulerTickHandler;
     private readonly logger: SchedulerLogger;
-    private readonly proc: ProcessLike;
+    private readonly proc: SchedulerProcessLike;
     private readonly timezone: string | undefined;
     private timer: ReturnType<typeof setInterval> | null = null;
     private running = false;
     private started = false;
     private currentTick: Promise<void> | null = null;
     private readonly signalHandlers: Array<{
-        signal: Signal;
+        signal: SchedulerSignal;
         handler: () => void;
     }> = [];
 
@@ -282,7 +265,7 @@ export class SchedulerWorker {
     }
 
     private registerSignalHandlers(): void {
-        const signals: Signal[] = ['SIGINT', 'SIGTERM'];
+        const signals: SchedulerSignal[] = ['SIGINT', 'SIGTERM'];
 
         signals.forEach((signal) => {
             const handler = () => {
@@ -325,3 +308,5 @@ export function createSchedulerWorker(
 ): SchedulerWorker {
     return new SchedulerWorker(options);
 }
+
+export type { SchedulerWorkerOptions } from '../models/types.js';
