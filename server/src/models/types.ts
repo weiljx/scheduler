@@ -103,6 +103,9 @@ export interface SchedulerProcessLike {
     on(signal: SchedulerSignal, handler: () => void): void;
     off?(signal: SchedulerSignal, handler: () => void): void;
     removeListener?(signal: SchedulerSignal, handler: () => void): void;
+    exit(code?: number): void;
+    kill?(pid: number, signal?: SchedulerSignal | number): void;
+    pid?: number;
 }
 
 /**

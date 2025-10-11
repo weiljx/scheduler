@@ -9,6 +9,8 @@ type Signal = 'SIGINT' | 'SIGTERM';
 
 type MockProcess = NonNullable<SchedulerWorkerOptions['process']> & {
     emit: (signal: Signal) => void;
+    kill?: jest.Mock<void, [number, Signal | number | undefined]>;
+    exit: jest.Mock<void, [number | undefined]>;
 };
 
 const createLoggerMock = () => ({
@@ -19,11 +21,12 @@ const createLoggerMock = () => ({
     debug: jest.fn(),
 });
 
-const createProcessMock = (): MockProcess => {
+const createProcessMock = (overrides: Partial<MockProcess> = {}): MockProcess => {
     const handlers = new Map<Signal, () => void>();
 
-    return {
+    const process: MockProcess = {
         env: {},
+        pid: 1234,
         on: jest.fn((signal: Signal, handler: () => void) => {
             handlers.set(signal, handler);
         }),
@@ -33,10 +36,21 @@ const createProcessMock = (): MockProcess => {
                 handlers.delete(signal);
             }
         }),
+        kill: jest.fn((pid: number, signal?: Signal | number) => {
+            void pid;
+            void signal;
+        }),
+        exit: jest.fn((code?: number) => {
+            void code;
+        }),
         emit: (signal: Signal) => {
             handlers.get(signal)?.();
         },
     };
+
+    Object.assign(process, overrides);
+
+    return process;
 };
 
 const flushMicrotasks = async () => {
@@ -222,6 +236,117 @@ describe('SchedulerWorker', () => {
         expect(loggerMock.error).not.toHaveBeenCalled();
         expect(loggerMock.warn).not.toHaveBeenCalled();
         expect(createJobSpy).not.toHaveBeenCalled();
+    });
+
+    it('re-emits shutdown signals only after the worker stops', async () => {
+        jest.useFakeTimers();
+
+        let resolveTick: ((value: SchedulerTickResult) => void) | undefined;
+        const tickHandler = jest
+            .fn<Promise<SchedulerTickResult>, [Date, SchedulerTickContext]>(
+                () =>
+                    new Promise<SchedulerTickResult>((resolve) => {
+                        resolveTick = resolve;
+                    })
+            );
+
+        const processMock = createProcessMock();
+        const loggerMock = createLoggerMock();
+
+        const worker = createSchedulerWorker({
+            enabled: true,
+            intervalMs: 1_000,
+            tickHandler,
+            process: processMock,
+            logger: loggerMock,
+        });
+
+        worker.start();
+        await flushMicrotasks();
+
+        expect(tickHandler).toHaveBeenCalledTimes(1);
+
+        if (!processMock.kill) {
+            throw new Error('Expected kill to be defined for this test');
+        }
+
+        const killCalls: Array<[number, Signal | number | undefined]> = [];
+        const killInvoked = new Promise<void>((resolve) => {
+            processMock.kill!.mockImplementation(
+                (pid: number, signal?: Signal | number) => {
+                    killCalls.push([pid, signal]);
+                    resolve();
+                }
+            );
+        });
+
+        processMock.emit('SIGINT');
+        await flushMicrotasks();
+
+        expect(processMock.kill.mock.calls.length).toBe(0);
+        expect(processMock.exit).not.toHaveBeenCalled();
+
+        // Subsequent signals before the first shutdown finishes should be ignored.
+        processMock.emit('SIGINT');
+        await flushMicrotasks();
+        expect(processMock.kill.mock.calls.length).toBe(0);
+
+        resolveTick?.({ dueSchedules: [] });
+        await killInvoked;
+        await flushMicrotasks();
+
+        expect(killCalls).toEqual([[processMock.pid!, 'SIGINT']]);
+        expect(processMock.exit).not.toHaveBeenCalled();
+        expect(processMock.off).toHaveBeenCalledTimes(2);
+
+        await worker.stop();
+    });
+
+    it('falls back to process.exit when kill is unavailable', async () => {
+        jest.useFakeTimers();
+
+        const tickHandler = jest
+            .fn<Promise<SchedulerTickResult>, [Date, SchedulerTickContext]>(
+                () => Promise.resolve({ dueSchedules: [] })
+            );
+
+        const exitCodes: Array<number | undefined> = [];
+        let exitResolve: (() => void) | undefined;
+        const exitPromise = new Promise<void>((resolve) => {
+            exitResolve = resolve;
+        });
+
+        const processMock = createProcessMock({
+            kill: undefined,
+            exit: jest.fn((code?: number) => {
+                exitCodes.push(code);
+                exitResolve?.();
+            }),
+        });
+        const loggerMock = createLoggerMock();
+
+        const worker = createSchedulerWorker({
+            enabled: true,
+            intervalMs: 1_000,
+            tickHandler,
+            process: processMock,
+            logger: loggerMock,
+        });
+
+        worker.start();
+        await flushMicrotasks();
+
+        processMock.emit('SIGTERM');
+        await exitPromise;
+        await flushMicrotasks();
+
+        expect(processMock.kill).toBeUndefined();
+        expect(exitCodes).toEqual([143]);
+        expect(processMock.exit).toHaveBeenCalledTimes(1);
+        expect(processMock.off).toHaveBeenCalledTimes(2);
+        expect(loggerMock.error).not.toHaveBeenCalled();
+
+        await worker.stop();
     });
 
     it('awaits the in-flight tick when stopping', async () => {

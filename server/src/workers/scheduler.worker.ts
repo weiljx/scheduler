@@ -137,7 +137,12 @@ function resolveProcess(
         | SchedulerProcessLike
         | undefined;
 
-    if (candidate && typeof candidate.on === 'function' && candidate.env) {
+    if (
+        candidate &&
+        typeof candidate.on === 'function' &&
+        candidate.env &&
+        typeof candidate.exit === 'function'
+    ) {
         return candidate;
     }
 
@@ -145,6 +150,8 @@ function resolveProcess(
         env: {},
         on: () => undefined,
         off: () => undefined,
+        exit: () => undefined,
+        kill: () => undefined,
     };
 }
 
@@ -166,6 +173,7 @@ export class SchedulerWorker {
     private timer: ReturnType<typeof setInterval> | null = null;
     private running = false;
     private started = false;
+    private signalStopPromise: Promise<void> | null = null;
     private currentTick: Promise<void> | null = null;
     private readonly signalHandlers: Array<{
         signal: SchedulerSignal;
@@ -322,14 +330,27 @@ export class SchedulerWorker {
         signals.forEach((signal) => {
             const handler = () => {
                 this.logger.info?.(
-                    `${LOG_PREFIX} Received ${signal}, stopping worker`
+                    `${LOG_PREFIX} Received ${signal}, preparing graceful shutdown`
                 );
-                this.stop().catch((error) => {
-                    this.logger.error?.(
-                        `${LOG_PREFIX} Failed to stop worker after ${signal}`,
-                        error
-                    );
-                });
+
+                if (this.signalStopPromise) {
+                    return;
+                }
+
+                this.signalStopPromise = (async () => {
+                    try {
+                        await this.stop();
+                    } catch (error) {
+                        this.logger.error?.(
+                            `${LOG_PREFIX} Failed to stop worker after ${signal}`,
+                            error
+                        );
+                    } finally {
+                        const forwardSignal = signal;
+                        this.signalStopPromise = null;
+                        this.forwardSignal(forwardSignal);
+                    }
+                })();
             };
 
             this.signalHandlers.push({ signal, handler });
@@ -352,6 +373,25 @@ export class SchedulerWorker {
         });
 
         this.signalHandlers.length = 0;
+    }
+
+    private forwardSignal(signal: SchedulerSignal): void {
+        const { kill, pid } = this.proc;
+
+        if (typeof kill === 'function' && typeof pid === 'number') {
+            try {
+                kill(pid, signal);
+                return;
+            } catch (error) {
+                this.logger.error?.(
+                    `${LOG_PREFIX} Failed to re-emit ${signal} via kill(), falling back to exit`,
+                    error
+                );
+            }
+        }
+
+        const exitCode = signal === 'SIGINT' ? 130 : 143;
+        this.proc.exit(exitCode);
     }
 }
 
