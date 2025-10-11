@@ -129,6 +129,7 @@ export interface CreateScheduleRequest {
     description?: string;
     cron: string;
     payload?: unknown;
+    processor: string;
 }
 
 /**

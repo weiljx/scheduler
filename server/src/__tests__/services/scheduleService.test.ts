@@ -14,7 +14,8 @@ describe('ScheduleService', () => {
                 name: 'Morning Sync',
                 description: 'Daily stand-up meeting',
                 cron: '* * * * *',
-                payload: { task: 'stand-up' }
+                payload: { task: 'stand-up' },
+                processor: 'report'
             };
             const createdSchedule = {
                 id: 'schedule-456'
@@ -31,6 +32,7 @@ describe('ScheduleService', () => {
                 description: payload.description,
                 cron: payload.cron,
                 payload: payload.payload,
+                processor: payload.processor,
                 createdBy: userId
             });
             expect(result).toBe(createdSchedule);
@@ -39,7 +41,8 @@ describe('ScheduleService', () => {
         it('persists a schedule without optional fields', async () => {
             const payload = {
                 name: 'Hourly Check',
-                cron: '0 * * * *'
+                cron: '0 * * * *',
+                processor: 'heartbeat'
             };
             const createdSchedule = {
                 id: 'schedule-789'
@@ -55,6 +58,7 @@ describe('ScheduleService', () => {
                 description: undefined,
                 cron: payload.cron,
                 payload: undefined,
+                processor: payload.processor,
                 createdBy: userId
             });
             expect(result).toBe(createdSchedule);
@@ -64,7 +68,8 @@ describe('ScheduleService', () => {
             const payload = {
                 name: 'Broken Job',
                 description: 'Has an invalid cron expression',
-                cron: 'not-a-valid-cron'
+                cron: 'not-a-valid-cron',
+                processor: 'broken'
             };
 
             const createSpy = jest.spyOn(Schedule, 'create');

@@ -29,6 +29,7 @@ const router = Router();
  *             required:
  *               - name
  *               - cron
+ *               - processor
  *             properties:
  *               name:
  *                 type: string
@@ -52,6 +53,10 @@ const router = Router();
  *                 example:
  *                   task: send-email
  *                   retries: 3
+ *               processor:
+ *                 type: string
+ *                 description: Identifier of the processor that should handle jobs created from this schedule
+ *                 example: report
  *     responses:
  *       201:
  *         description: Schedule created
@@ -76,6 +81,9 @@ const router = Router();
  *                 payload:
  *                   nullable: true
  *                   description: Arbitrary JSON payload associated with the schedule
+ *                 processor:
+ *                   type: string
+ *                   example: report
  *                 createdBy:
  *                   type: string
  *                   example: user-123
@@ -117,9 +125,9 @@ const router = Router();
  */
 router.post('/', authenticateToken, async (req: AuthRequest, res) => {
     try {
-        const { name, cron, description, payload } = req.body as CreateScheduleRequest;
+        const { name, cron, description, payload, processor } = req.body as CreateScheduleRequest;
 
-        if (!name || !cron) {
+        if (!name || !cron || !processor) {
             return res.status(HttpStatus.BAD_REQUEST).json({ error: HttpMessages.MISSING_FIELDS });
         }
 
@@ -129,7 +137,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
             });
         }
 
-        const scheduleData: CreateScheduleRequest = { name, cron };
+        const scheduleData: CreateScheduleRequest = { name, cron, processor };
         if (description !== undefined) {
             scheduleData.description = description;
         }
