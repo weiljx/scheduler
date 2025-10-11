@@ -63,6 +63,7 @@ describe('Schedules Routes', () => {
                     cron: '0 9 * * *',
                     description: 'Sends daily report',
                     payload: { reportType: 'daily' },
+                    processor: 'report',
                     createdBy: 'user-123',
                     createdAt
                 })
@@ -76,7 +77,8 @@ describe('Schedules Routes', () => {
                     name: 'Daily Report',
                     cron: '0 9 * * *',
                     description: 'Sends daily report',
-                    payload: { reportType: 'daily' }
+                    payload: { reportType: 'daily' },
+                    processor: 'report'
                 });
 
             expect(response.status).toBe(HttpStatus.CREATED);
@@ -85,7 +87,8 @@ describe('Schedules Routes', () => {
                 name: 'Daily Report',
                 cron: '0 9 * * *',
                 description: 'Sends daily report',
-                payload: { reportType: 'daily' }
+                payload: { reportType: 'daily' },
+                processor: 'report'
             });
         });
 
@@ -95,6 +98,7 @@ describe('Schedules Routes', () => {
                     _id: 'schedule-789',
                     name: 'Heartbeat',
                     cron: '*/5 * * * *',
+                    processor: 'heartbeat',
                     createdBy: 'user-123',
                     createdAt: '2025-10-08T00:05:00.000Z'
                 })
@@ -106,14 +110,16 @@ describe('Schedules Routes', () => {
                 .post('/api/schedules')
                 .send({
                     name: 'Heartbeat',
-                    cron: '*/5 * * * *'
+                    cron: '*/5 * * * *',
+                    processor: 'heartbeat'
                 });
 
             expect(response.status).toBe(HttpStatus.CREATED);
             expect(response.body).toEqual(scheduleDocument.toJSON());
             expect(createScheduleMock).toHaveBeenCalledWith('user-123', {
                 name: 'Heartbeat',
-                cron: '*/5 * * * *'
+                cron: '*/5 * * * *',
+                processor: 'heartbeat'
             });
         });
 
@@ -121,7 +127,8 @@ describe('Schedules Routes', () => {
             const response = await request(app)
                 .post('/api/schedules')
                 .send({
-                    description: 'Missing required fields'
+                    name: 'Missing processor job',
+                    cron: '0 10 * * *'
                 });
 
             expect(response.status).toBe(HttpStatus.BAD_REQUEST);
@@ -136,7 +143,8 @@ describe('Schedules Routes', () => {
                 .post('/api/schedules')
                 .send({
                     name: 'Broken job',
-                    cron: 'invalid cron'
+                    cron: 'invalid cron',
+                    processor: 'report'
                 });
 
             expect(response.status).toBe(HttpStatus.BAD_REQUEST);
@@ -149,7 +157,8 @@ describe('Schedules Routes', () => {
                 .set('x-mock-payload', 'function')
                 .send({
                     name: 'Invalid payload job',
-                    cron: '0 12 * * *'
+                    cron: '0 12 * * *',
+                    processor: 'report'
                 });
 
             expect(response.status).toBe(HttpStatus.BAD_REQUEST);
@@ -166,7 +175,8 @@ describe('Schedules Routes', () => {
                 .post('/api/schedules')
                 .send({
                     name: 'Monthly summary',
-                    cron: '0 0 1 * *'
+                    cron: '0 0 1 * *',
+                    processor: 'report'
                 });
 
             expect(response.status).toBe(HttpStatus.INTERNAL_SERVER_ERROR);

@@ -16,7 +16,7 @@ export class ScheduleService {
         userId: string,
         data: CreateScheduleRequest
     ): Promise<IScheduleDocument> {
-        const { name, description, cron, payload } = data;
+        const { name, description, cron, payload, processor } = data;
 
         // Validate cron expression early for clear, consistent error message
         if (!validateCron(cron)) {
@@ -28,6 +28,7 @@ export class ScheduleService {
             description,
             cron,
             payload,
+            processor,
             createdBy: userId,
         });
 
