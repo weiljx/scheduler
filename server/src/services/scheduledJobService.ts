@@ -3,7 +3,7 @@ import ScheduledJob from '../models/scheduledJob.js';
 import Schedule from '../models/schedule.js';
 import type { IScheduledJob, ScheduledJobLeanDocument } from '../models/types.js';
 
-const ALLOWED_STATUSES: ReadonlyArray<IScheduledJob['status']> = ['pending', 'success', 'failed'];
+const ALLOWED_STATUSES: ReadonlyArray<IScheduledJob['status']> = ['pending', 'started', 'success', 'failed'];
 
 export class ScheduledJobValidationError extends Error {
     constructor(message: string) {

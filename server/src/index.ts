@@ -1,8 +1,9 @@
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
-import routes from './routes/index.js';
 import connectDB from './config/database.js';
+import routes from './routes/index.js';
+import { createSchedulerWorker } from './workers/scheduler.worker.js';
 
 const app = express();
 
@@ -52,10 +53,12 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
+const schedulerWorker = createSchedulerWorker();
 
 app.use('/api', routes);
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
   console.log(`Swagger docs available at http://localhost:${port}/api-docs`);
+  schedulerWorker.start();
 });

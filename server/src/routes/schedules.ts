@@ -171,7 +171,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
  *         required: false
  *         schema:
  *           type: string
- *           enum: [pending, success, failed]
+ *           enum: [pending, started, success, failed]
  *         description: Optional status filter for the scheduled jobs
  *     responses:
  *       200:
@@ -196,7 +196,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
  *                     nullable: true
  *                   status:
  *                     type: string
- *                     enum: [pending, success, failed]
+ *                     enum: [pending, started, success, failed]
  *       400:
  *         description: Invalid request parameters
  *         content:
@@ -279,7 +279,7 @@ router.get('/:scheduleId/jobs', authenticateToken, async (req: AuthRequest, res)
  *                   nullable: true
  *                 status:
  *                   type: string
- *                   enum: [pending, success, failed]
+ *                   enum: [pending, started, success, failed]
  *       400:
  *         description: Invalid schedule identifier
  *         content:
