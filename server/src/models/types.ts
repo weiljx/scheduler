@@ -24,6 +24,7 @@ export interface ISchedule {
     name: string;
     description?: string;
     cron: string;
+    processor: string;
     createdBy: string;
     createdAt?: Date;
     payload?: unknown;

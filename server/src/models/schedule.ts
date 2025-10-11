@@ -29,6 +29,11 @@ const scheduleSchema = new Schema({
             message: (props: { value: string }) => `${props.value} is not a valid cron expression`
         }
     },
+    processor: {
+        type: String,
+        required: [true, 'Processor is required'],
+        trim: true
+    },
     createdBy: {
         type: String,
         ref: 'User',
