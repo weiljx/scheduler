@@ -1,84 +1,13 @@
-import type {
-    JobDispatcherWorkerOptions,
-    SchedulerLogger,
-    SchedulerProcessLike,
-    SchedulerSignal,
-} from '../models/types.js';
+import type { JobDispatcherWorkerOptions, SchedulerLogger, SchedulerProcessLike, SchedulerSignal } from '../models/types.js';
 import ScheduledJob from '../models/scheduledJob.js';
 import type { IScheduledJobDocument } from '../models/scheduledJob.js';
 import Schedule from '../models/schedule.js';
 import { getProcessor } from '../processors/registry.js';
+import { normalizeBoolean, normalizePositiveInteger, resolveProcess, hasUnref } from './worker.utils.js';
 
 const LOG_PREFIX = '[JobDispatcherWorker]';
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
 const DEFAULT_BATCH_SIZE = 1;
-
-function normalizeBoolean(value: string | undefined, fallback: boolean): boolean {
-    if (value === undefined) {
-        return fallback;
-    }
-
-    const normalized = value.trim().toLowerCase();
-
-    if (['1', 'true', 'yes', 'on'].includes(normalized)) {
-        return true;
-    }
-
-    if (['0', 'false', 'no', 'off'].includes(normalized)) {
-        return false;
-    }
-
-    return fallback;
-}
-
-function normalizeNumber(value: string | undefined, fallback: number): number {
-    if (value === undefined) {
-        return fallback;
-    }
-
-    const parsed = Number.parseInt(value, 10);
-
-    if (Number.isNaN(parsed) || parsed <= 0) {
-        return fallback;
-    }
-
-    return parsed;
-}
-
-function resolveProcess(customProcess?: SchedulerProcessLike): SchedulerProcessLike {
-    if (customProcess) {
-        return customProcess;
-    }
-
-    const candidate = (globalThis as { process?: unknown }).process as
-        | SchedulerProcessLike
-        | undefined;
-
-    if (
-        candidate &&
-        typeof candidate.on === 'function' &&
-        candidate.env &&
-        typeof candidate.exit === 'function'
-    ) {
-        return candidate;
-    }
-
-    return {
-        env: {},
-        on: () => undefined,
-        off: () => undefined,
-        exit: () => undefined,
-        kill: () => undefined,
-    };
-}
-
-function hasUnref(timer: unknown): timer is { unref: () => void } {
-    return (
-        typeof timer === 'object' &&
-        timer !== null &&
-        typeof (timer as { unref?: unknown }).unref === 'function'
-    );
-}
 
 export class JobDispatcherWorker {
     private readonly enabled: boolean;
@@ -104,13 +33,13 @@ export class JobDispatcherWorker {
             normalizeBoolean(this.proc.env.JOB_DISPATCHER_ENABLED, true);
         this.intervalMs =
             options.intervalMs ??
-            normalizeNumber(
+            normalizePositiveInteger(
                 this.proc.env.JOB_DISPATCHER_POLL_INTERVAL_MS,
                 DEFAULT_POLL_INTERVAL_MS
             );
         this.batchSize =
             options.batchSize ??
-            normalizeNumber(
+            normalizePositiveInteger(
                 this.proc.env.JOB_DISPATCHER_BATCH_SIZE,
                 DEFAULT_BATCH_SIZE
             );
