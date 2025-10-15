@@ -4,8 +4,16 @@ export interface ProcessorResult {
     result?: unknown;
 }
 
-export interface Processor {
-    readonly type: string;
-    process(job: IScheduledJobDocument): Promise<ProcessorResult>;
+export interface ProcessorContext {
+    schedule?: {
+        _id?: unknown;
+        processor?: string;
+        payload?: unknown;
+        createdBy?: string;
+    };
 }
 
+export interface Processor {
+    readonly type: string;
+    process(job: IScheduledJobDocument, context: ProcessorContext): Promise<ProcessorResult>;
+}

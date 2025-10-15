@@ -1,4 +1,4 @@
-import type { Processor, ProcessorResult } from './processor.types.js';
+import type { Processor, ProcessorResult, ProcessorContext } from './processor.types.js';
 import type { IScheduledJobDocument } from '../models/scheduledJob.js';
 
 export class DefaultProcessor implements Processor {
@@ -6,11 +6,18 @@ export class DefaultProcessor implements Processor {
 
     readonly type = DefaultProcessor.type;
 
-    async process(job: IScheduledJobDocument): Promise<ProcessorResult> {
-        const payload = (job as { payload?: unknown }).payload ?? null;
+    async process(
+        job: IScheduledJobDocument,
+        context: ProcessorContext
+    ): Promise<ProcessorResult> {
+        const payload = context.schedule?.payload ?? null;
+        const scheduleIdRaw =
+            context.schedule?._id ?? job.scheduleId ?? '(unknown)';
+        const scheduleId = String(scheduleIdRaw);
+        const jobId = String(job._id);
 
         console.log(
-            `[DefaultProcessor] jobId=${job._id.toString()}`,
+            `[DefaultProcessor] jobId=${jobId} scheduleId=${scheduleId}`,
             { payload }
         );
 
@@ -21,4 +28,3 @@ export class DefaultProcessor implements Processor {
         };
     }
 }
-

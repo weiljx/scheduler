@@ -122,6 +122,17 @@ export interface SchedulerWorkerOptions {
 }
 
 /**
+ * Configuration accepted by the job dispatcher worker factory.
+ */
+export interface JobDispatcherWorkerOptions {
+    enabled?: boolean;
+    intervalMs?: number;
+    batchSize?: number;
+    logger?: SchedulerLogger;
+    process?: SchedulerProcessLike;
+}
+
+/**
  * Request body for creating a new schedule
  */
 export interface CreateScheduleRequest {
