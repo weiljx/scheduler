@@ -9,6 +9,11 @@ const LOG_PREFIX = '[JobDispatcherWorker]';
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
 const DEFAULT_BATCH_SIZE = 1;
 
+/**
+ * Polls the ScheduledJob collection, atomically claims pending jobs, and
+ * dispatches them to the appropriate processor. Multiple instances can run in
+ * parallel without double-processing thanks to the findOneAndUpdate claim.
+ */
 export class JobDispatcherWorker {
     private readonly enabled: boolean;
     private readonly intervalMs: number;
@@ -25,6 +30,9 @@ export class JobDispatcherWorker {
         handler: () => void;
     }> = [];
 
+    /**
+     * Creates a dispatcher worker with optional overrides for env-driven knobs.
+     */
     constructor(options: JobDispatcherWorkerOptions = {}) {
         this.proc = resolveProcess(options.process);
         this.logger = options.logger ?? console;
@@ -45,6 +53,9 @@ export class JobDispatcherWorker {
             );
     }
 
+    /**
+     * Starts the polling loop if the worker is enabled and not already running.
+     */
     start(): void {
         if (!this.enabled) {
             this.logger.info?.(
@@ -77,6 +88,9 @@ export class JobDispatcherWorker {
         );
     }
 
+    /**
+     * Stops the polling loop and waits for any in-flight job handling to finish.
+     */
     async stop(): Promise<void> {
         if (!this.started) {
             return;
@@ -100,6 +114,9 @@ export class JobDispatcherWorker {
         }
     }
 
+    /**
+     * Executes a single polling iteration while preventing re-entrancy.
+     */
     private async runTick(): Promise<void> {
         if (!this.started || this.running) {
             return;
@@ -129,6 +146,11 @@ export class JobDispatcherWorker {
         await execution;
     }
 
+    /**
+     * Claims and processes jobs up to the configured batch size.
+     *
+     * @returns Number of jobs processed during this batch.
+     */
     private async dispatchBatch(): Promise<number> {
         let processed = 0;
 
@@ -146,6 +168,9 @@ export class JobDispatcherWorker {
         return processed;
     }
 
+    /**
+     * Atomically claims the next pending job for processing.
+     */
     private async claimNextJob(): Promise<IScheduledJobDocument | null> {
         const claimed = await ScheduledJob.findOneAndUpdate(
             { status: 'pending' },
@@ -168,6 +193,9 @@ export class JobDispatcherWorker {
         return claimed as IScheduledJobDocument;
     }
 
+    /**
+     * Dispatches the job to the resolved processor and updates terminal status.
+     */
     private async handleJob(job: IScheduledJobDocument): Promise<void> {
         const jobId = String(job._id);
 
@@ -239,6 +267,9 @@ export class JobDispatcherWorker {
         }
     }
 
+    /**
+     * Subscribes to termination signals so the worker can shut down cleanly.
+     */
     private registerSignalHandlers(): void {
         const signals: SchedulerSignal[] = ['SIGINT', 'SIGTERM'];
 
@@ -273,6 +304,9 @@ export class JobDispatcherWorker {
         });
     }
 
+    /**
+     * Removes previously registered termination handlers.
+     */
     private unregisterSignalHandlers(): void {
         const remove =
             this.proc.off?.bind(this.proc) ??
@@ -290,6 +324,10 @@ export class JobDispatcherWorker {
         this.signalHandlers.length = 0;
     }
 
+    /**
+     * Re-emits the signal to the parent process using kill when available,
+     * otherwise falls back to exit codes aligned with shell conventions.
+     */
     private forwardSignal(signal: SchedulerSignal): void {
         const { kill, pid } = this.proc;
 
@@ -310,6 +348,9 @@ export class JobDispatcherWorker {
     }
 }
 
+/**
+ * Convenience factory that mirrors the scheduler worker helper.
+ */
 export function createJobDispatcherWorker(
     options?: JobDispatcherWorkerOptions
 ): JobDispatcherWorker {

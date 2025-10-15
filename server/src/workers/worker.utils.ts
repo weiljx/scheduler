@@ -1,7 +1,10 @@
 import type { SchedulerProcessLike } from '../models/types.js';
 
+/**
+ * Parses common truthy/falsey string values into a boolean, returning the
+ * provided fallback when the value is empty or unrecognised.
+ */
 export function normalizeBoolean(value: string | undefined, fallback: boolean): boolean {
-    
     if (value === undefined) {
         return fallback;
     }
@@ -19,8 +22,11 @@ export function normalizeBoolean(value: string | undefined, fallback: boolean): 
     return fallback;
 }
 
+/**
+ * Parses a positive integer from a string; returns the fallback when parsing
+ * fails or the number is non-positive.
+ */
 export function normalizePositiveInteger(value: string | undefined, fallback: number): number {
-    
     if (value === undefined) {
         return fallback;
     }
@@ -34,8 +40,12 @@ export function normalizePositiveInteger(value: string | undefined, fallback: nu
     return parsed;
 }
 
+/**
+ * Resolves the process-like object used for env access and signal handling,
+ * defaulting to the global Node process when no custom implementation is
+ * provided.
+ */
 export function resolveProcess(customProcess?: SchedulerProcessLike): SchedulerProcessLike {
-    
     if (customProcess) {
         return customProcess;
     }
@@ -44,11 +54,12 @@ export function resolveProcess(customProcess?: SchedulerProcessLike): SchedulerP
         | SchedulerProcessLike
         | undefined;
 
-    if (candidate &&
+    if (
+        candidate &&
         typeof candidate.on === 'function' &&
         candidate.env &&
         typeof candidate.exit === 'function'
-) {
+    ) {
         return candidate;
     }
 
@@ -61,6 +72,9 @@ export function resolveProcess(customProcess?: SchedulerProcessLike): SchedulerP
     };
 }
 
+/**
+ * Type guard that detects Node.js timers exposing an `unref` method.
+ */
 export function hasUnref(timer: unknown): timer is { unref: () => void } {
     return (
         typeof timer === 'object' &&
